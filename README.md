@@ -10,3 +10,4 @@
 
 ## Two-Fluid Model
 1. TOV_two_fluid.py : Contains Python code for solving the Tolman-Oppenheimer-Volkoff (TOV) equations for a single two fluid star. It also generates plots for the pressure and mass profiles of a single neutron star under the "TwoFluid_PR_MR" module.
+
