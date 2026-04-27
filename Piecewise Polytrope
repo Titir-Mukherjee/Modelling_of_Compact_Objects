@@ -1,0 +1,87 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+G = 6.674e-8
+
+K1      = 1e5
+Gamma1  = 1.8
+Gamma2  = 2.5
+rho_t   = 1e9
+
+P_t = K1 * rho_t**Gamma1
+K2  = P_t / rho_t**Gamma2
+
+def P_of_rho(rho):
+    return K1 * rho**Gamma1 if rho < rho_t else K2 * rho**Gamma2
+
+def rho_of_P_pw(P):
+    return (P/K1)**(1/Gamma1) if P <= P_t else (P/K2)**(1/Gamma2)
+
+def rho_of_P_single(P):
+    return (max(P,0)/K1)**(1/Gamma1)
+
+def solve(Pc, rho_from_P, N=30000):
+    r_arr = np.linspace(1e-6, 2e6, N)
+    dr = r_arr[1] - r_arr[0]
+    r, m, P = r_arr[0], 1e-10, Pc
+    rs, ms, rhos = [], [], []
+    for _ in r_arr:
+        if P < 1e-10 * Pc:
+            break
+        rho = rho_from_P(max(P, 0.0))
+        rs.append(r); ms.append(m); rhos.append(rho)
+        def deriv(r_, m_, P_):
+            rh = rho_from_P(max(P_,0.0))
+            return 4*np.pi*r_**2*rh, (-G*m_*rh/r_**2 if r_>0 else 0.0)
+        k1m,k1P = deriv(r,      m,          P)
+        k2m,k2P = deriv(r+dr/2, m+dr*k1m/2, P+dr*k1P/2)
+        k3m,k3P = deriv(r+dr/2, m+dr*k2m/2, P+dr*k2P/2)
+        k4m,k4P = deriv(r+dr,   m+dr*k3m,   P+dr*k3P)
+        m += dr/6*(k1m+2*k2m+2*k3m+k4m)
+        P += dr/6*(k1P+2*k2P+2*k3P+k4P)
+        P = max(P, 0.0)
+        r += dr
+    return np.array(rs), np.array(ms), np.array(rhos)
+
+Pc = 1e35
+km = 1e5
+M_sun = 1.989e33
+
+r1, m1, rho1 = solve(Pc, rho_of_P_single)
+r2, m2, rho2 = solve(Pc, rho_of_P_pw)
+
+print(f"Single:    R={r1[-1]/km:.2f} km  M={m1[-1]/M_sun:.4f} Msun")
+print(f"Piecewise: R={r2[-1]/km:.2f} km  M={m2[-1]/M_sun:.4f} Msun")
+
+# ---- Plot 1: Mass profiles ----
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.plot(r1/km, m1/M_sun, 'b-',  lw=2, label=f'Single Γ={Gamma1}')
+ax.plot(r2/km, m2/M_sun, 'r--', lw=2, label=f'Piecewise Γ={Gamma1}→{Gamma2}')
+ax.set_xlabel('Radius [km]', fontsize=12)
+ax.set_ylabel('Enclosed Mass [M☉]', fontsize=12)
+ax.set_title('Mass Profile', fontsize=13)
+ax.legend(fontsize=10)
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig("/mnt/user-data/outputs/mass_profile.png", dpi=150, bbox_inches='tight')
+plt.close()
+
+# ---- Plot 2: EOS ----
+rho_range = np.linspace(1e6, 3e10, 500)
+P_single  = K1 * rho_range**Gamma1
+P_pw      = np.array([P_of_rho(rh) for rh in rho_range])
+
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.loglog(rho_range, P_single, 'b-',  lw=2, label=f'Single Γ={Gamma1}')
+ax.loglog(rho_range, P_pw,     'r--', lw=2, label=f'Piecewise Γ={Gamma1}→{Gamma2}')
+ax.axvline(rho_t, color='gray', ls=':', lw=1.5, label=f'ρ_t = {rho_t:.0e}')
+ax.set_xlabel('Density [g/cm³]', fontsize=12)
+ax.set_ylabel('Pressure [dyn/cm²]', fontsize=12)
+ax.set_title('EOS  (P vs ρ)', fontsize=13)
+ax.legend(fontsize=10)
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig("/mnt/user-data/outputs/eos_profile.png", dpi=150, bbox_inches='tight')
+plt.close()
+
+print("Saved.")
